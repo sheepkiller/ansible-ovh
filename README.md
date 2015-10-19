@@ -4,7 +4,7 @@
 Add/remove/modify ssh keys
 ## inventory
 Proto inventory need more work
-## VPS
+## ovh_vps
 * start
 * stop
 * reboot
