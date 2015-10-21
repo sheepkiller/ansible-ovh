@@ -27,17 +27,32 @@ options:
         description:
             - Determines wether the ssh is to be created/modified or deleted
               Warning: modification is a delete/create sequence
+
+    default:
+        required: false
+        default: false
+        description:
+            - Set ssh key as default
     region:
         required: false
         default: ovh-eu
         description:
-            - Region to put you ssh keys. Please refer to OVH API documentation
-    makedefault:
+            - Region/endpoint to put you ssh keys. Please refer to OVH API documentation
+    application_key:
         required: false
         default: false
         description:
-            - Set default ssh key
-              Not yet implemented
+            - your application key
+    application_secret:
+        required: false
+        default: false
+        description:
+            - you application secret
+    consumer_key:
+        required: false
+        default: false
+        description:
+            - your consumer key
 '''
 
 EXAMPLES = '''
@@ -73,7 +88,12 @@ def get_and_compare(module, client, name, key):
         return "Ok"
     return "ToUpdate"
 
-
+OVH_CLIENT_ARGS = [
+    "endpoint",
+    "application_key",
+    "application_secret",
+    "consumer_key"
+]
 def main():
 
     module = AnsibleModule(
@@ -81,19 +101,51 @@ def main():
             path=dict(default=None),
             name=dict(required=True),
             state=dict(default='present', choices=['present', 'absent']),
-            region=dict(default="ovh-eu"),
-            makedefault=dict(default=False)
+            default=dict(default=None),
+            endpoint=dict(default=None,aliases=['region']),
+            application_key=dict(default=None),
+            application_secret=dict(default=None),
+            consumer_key=dict(default=None)
         )
     )
+    connect_info=dict()
+    key_info=None
     # Set params
     ssh_key_file = module.params.get('path')
     ssh_key_name = module.params.get('name')
     key_state = module.params.get('state')
+    isDefault = module.params.get('default')
     ovh_endpoint = module.params.get('region')
     ssh_key = None
 
-    client = ovh.Client(endpoint=ovh_endpoint)
+    for arg in OVH_CLIENT_ARGS:
+        connect_info[arg] = module.params.get(arg)
+    try:
+        client = ovh.Client(**connect_info)
+    except:
+        e = sys.exc_info()[0]
+        module.fail_json(msg="Can't connect to API: ' {}".format(e))
+
+    try:
+        key_info = client.get('/me/sshKey/{}'.format(ssh_key_name))
+    except ovh.ResourceNotFoundError:
+        key_info= {'key': None, 'sshKey': None, 'default':None}
+    except:
+        e = sys.exc_info()[0]
+        module.fail_json(msg="Unable to fetch key {0}: Unknown API Error: ' {1}".format(ssh_key_namessh_key_name,e))
+
+    if key_state == "absent":
+        if key_info['key'] == None:
+            module.exit_json(changed=False)
+        try:
+            client.delete('/me/sshKey/{}'.format(ssh_key_name))
+        except:
+            e = sys.exc_info()[0]
+            module.fail_json(msg='delete fail {}'.format(e))
+        module.exit_json(changed=True)
+
     if key_state == "present":
+        change=False
         if ssh_key_file is None:
             module.fail_json(msg='Missing path argument')
         try:
@@ -104,38 +156,39 @@ def main():
                                                         e.errno,
                                                         e.strerror))
         except:
-            module.fail_json(msg='Unknow error')
-        to_change = get_and_compare(module, client, ssh_key_name, ssh_key)
-        if to_change == "Ok":
-            module.exit_json(changed=False)
+            module.fail_json(msg='Unknow error({0}):{1}'.format(
+                                                        e.errno,
+                                                        e.strerror))
 
-        if to_change == "ToUpdate":
+        if key_info['key'] == ssh_key and key_info['default'] == isDefault and key_info['keyName'] == ssh_key_name:
+            module.exit_json(change=False)
+
+        if key_info['default'] is not None and key_info['key'] == ssh_key and isDefault is not None:
+            try:
+                client.put('/me/sshKey/{}'.format(ssh_key_name),default=isDefault)
+            except:
+                e = sys.exc_info()[0]
+                module.fail_json(msg='put failed {}'.format(e))
+            module.exit_json(msg="key updated", changed=True)
+
+        if key_info['default'] is not None:
             try:
                 client.delete('/me/sshKey/{}'.format(ssh_key_name))
             except:
                 e = sys.exc_info()[0]
                 module.fail_json(msg='delete failed {}'.format(e))
-            to_change = "NotExists"
-        if to_change == "NotExists":
+        try:
+            client.post("/me/sshKey", key=ssh_key, keyName=ssh_key_name)
+        except:
+            e = sys.exc_info()[0]
+            module.fail_json(msg='post fail {}'.format(e))
+        isDefault = isDefault if isDefault is not None else key_info["default"]
+        if isDefault is not None:
             try:
-                client.post("/me/sshKey", key=ssh_key, keyName=ssh_key_name)
+                client.put('/me/sshKey/{}'.format(ssh_key_name),default=isDefault)
             except:
                 e = sys.exc_info()[0]
-                module.fail_json(msg='post fail {}'.format(e))
-            module.exit_json(changed=True)
-    if key_state == "absent":
-        try:
-            client.get('/me/sshKey/{}'.format(ssh_key_name))
-        except ovh.ResourceNotFoundError:
-            module.exit_json(changed=False)
-        except:
-            e = sys.exc_info()[0]
-            module.fail_json(msg="Unknown API Error: ' {}".format(e))
-        try:
-            client.delete('/me/sshKey/{}'.format(ssh_key_name))
-        except:
-            e = sys.exc_info()[0]
-            module.fail_json(msg='delete fail {}'.format(e))
+                module.fail_json(msg='update default failed - inconsistency may happen {}'.format(e))
         module.exit_json(changed=True)
 
     module.fail_json(msg="you shouln't be here !")
