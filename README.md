@@ -1,3 +1,4 @@
+
 # WORK IN PROGRESS
 # Some stuff for ansible to manipulate OVH API
 ## ovh_ssh
@@ -11,3 +12,4 @@ Proto inventory need more work
 * reinstall
 
 See source for examples
+
