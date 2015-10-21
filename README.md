@@ -1,11 +1,12 @@
-
 # WORK IN PROGRESS
 # Some stuff for ansible to manipulate OVH API
-## ovh_ssh
+## Should be usable
+#### ovh_ssh
 Add/remove/modify ssh keys
-## inventory
-Proto inventory need more work
-## ovh_vps
+#### inventory
+See ovh.ini for options
+## Limited usability
+##### ovh_vps
 * start
 * stop
 * reboot
