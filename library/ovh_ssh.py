@@ -73,27 +73,14 @@ except ImportError:
     print "failed=True msg='ovh required for this module'"
     sys.exit(1)
 
-
-def get_and_compare(module, client, name, key):
-    resp = None
-    try:
-        resp = client.get('/me/sshKey/{}'.format(name))
-    except ovh.ResourceNotFoundError:
-        return "NotExists"
-    except:
-        e = sys.exc_info()[0]
-        module.fail_json(msg="Unknown API Error: ' {}".format(e))
-    ovh_key = resp['key']
-    if ovh_key == key:
-        return "Ok"
-    return "ToUpdate"
-
 OVH_CLIENT_ARGS = [
     "endpoint",
     "application_key",
     "application_secret",
     "consumer_key"
 ]
+
+
 def main():
 
     module = AnsibleModule(
